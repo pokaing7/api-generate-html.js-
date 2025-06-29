@@ -1,0 +1,188 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IP INFO TOOL</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      background-color: black;
+      color: lime;
+      font-family: monospace;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+    }
+    #output {
+      border: 2px solid lime;
+      padding: 10px;
+      margin: 20px auto 0;
+      width: 90%;
+      max-width: 500px;
+      text-align: left;
+      background-color: #111;
+      box-shadow: 0 0 10px lime;
+      display: none;
+    }
+    #errorBox {
+      border: 2px solid red;
+      background-color: #330000;
+      color: red;
+      padding: 10px;
+      margin: 20px auto;
+      width: 90%;
+      max-width: 500px;
+      font-weight: bold;
+      display: none;
+    }
+    input[type="text"] {
+      background: black;
+      border: 2px solid lime;
+      color: lime;
+      padding: 10px;
+      font-size: 16px;
+      width: 95%;
+      max-width: 400px;
+      text-align: center;
+      margin-bottom: 10px;
+      box-shadow: 0 0 5px lime;
+    }
+    button {
+      background: black;
+      border: 2px solid lime;
+      color: lime;
+      padding: 10px 20px;
+      cursor: pointer;
+      font-weight: bold;
+      box-shadow: 0 0 5px lime;
+      margin: 10px 5px 20px 5px;
+      font-size: 16px;
+    }
+    .map {
+      width: 100%;
+      max-width: 600px;
+      height: 300px;
+      margin: 0 auto;
+      box-shadow: 0 0 10px lime;
+      display: none;
+    }
+    footer {
+      color: red;
+      margin-top: 20px;
+    }
+    .whatsapp {
+      margin-top: 20px;
+      padding: 10px;
+      border: 2px solid lime;
+      display: inline-block;
+      color: lime;
+    }
+    .whatsapp a {
+      color: lime;
+      text-decoration: none;
+      font-weight: bold;
+    }
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+  <h1 style="color:red">IP INFO TOOL</h1>
+  <input type="text" id="ipInput" placeholder="Enter IP address or Coordinates (lat,lon)">
+  <br>
+  <button onclick="getIPInfo()">SCAN</button>
+  <div id="errorBox"></div>
+  <div id="output"></div>
+  <div id="map" class="map"></div>
+  <div class="whatsapp">
+    📩 <a href="https://whatsapp.com/channel/0029VbB5rqQIiRokILC0p23M" target="_blank">
+      Join Our WhatsApp Channel
+    </a>
+  </div>
+  <footer>DEVELOPED BY: MOAZZAM KHAN</footer>
+  <script>
+    let map;function isLocalIP(ip) {
+  return ip.startsWith("192.168.") || ip.startsWith("10.") || ip.startsWith("127.") || ip === "::1";
+}
+
+function showError(message) {
+  const errorBox = document.getElementById('errorBox');
+  errorBox.innerText = message;
+  errorBox.style.display = 'block';
+  setTimeout(() => errorBox.style.display = 'none', 5000);
+}
+
+async function getIPInfo() {
+  const input = document.getElementById('ipInput').value.trim();
+  const output = document.getElementById('output');
+  const mapContainer = document.getElementById('map');
+  const errorBox = document.getElementById('errorBox');
+
+  output.style.display = 'none';
+  mapContainer.style.display = 'none';
+  output.innerHTML = '';
+  errorBox.style.display = 'none';
+
+  if (/^-?\d+(\.\d+)?\s*,\s*-?\d+(\.\d+)?$/.test(input)) {
+    const [lat, lon] = input.split(',').map(Number);
+    if (isNaN(lat) || isNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      showError("❌ Error: Invalid Coordinates entered.");
+      return;
+    }
+    showMap(lat, lon, `Lat: ${lat}, Lon: ${lon}`);
+    return;
+  }
+
+  if (isLocalIP(input)) {
+    showError("❌ Error: Local IP addresses are not supported.");
+    return;
+  }
+
+  try {
+    const res = await fetch(`https://ipwho.is/${input}`);
+    const data = await res.json();
+
+    if (!data || data.success === false || !data.ip) {
+      showError("❌ Error: Could not find information for this IP.");
+      return;
+    }
+
+    output.innerHTML = `
+      <strong>IP:</strong> ${data.ip}<br>
+      ${data.city ? `<strong>City:</strong> ${data.city}<br>` : '<strong>City:</strong> Not Available<br>'}
+      ${data.region ? `<strong>Region:</strong> ${data.region}<br>` : ''}
+      ${data.country ? `<strong>Country:</strong> ${data.country}<br>` : '<strong>Country:</strong> Not Available<br>'}
+      ${data.connection && data.connection.org ? `<strong>ISP:</strong> ${data.connection.org}<br>` : ''}
+      ${data.latitude ? `<strong>Latitude:</strong> ${data.latitude}<br>` : ''}
+      ${data.longitude ? `<strong>Longitude:</strong> ${data.longitude}<br>` : ''}
+    `;
+
+    output.style.display = 'block';
+
+    if (data.latitude && data.longitude) {
+      showMap(data.latitude, data.longitude, `${data.city || data.country || 'Location'}`);
+    }
+  } catch (e) {
+    showError("❌ Error: Could not fetch data for this IP.");
+  }
+}
+
+function showMap(lat, lon, popupText) {
+  const mapContainer = document.getElementById('map');
+  mapContainer.style.display = 'block';
+  if (map) map.remove();
+  map = L.map('map').setView([lat, lon], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+  L.marker([lat, lon]).addTo(map).bindPopup(popupText).openPopup();
+}
+
+  </script>
+</body>
+</html>
